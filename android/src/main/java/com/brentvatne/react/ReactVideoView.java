@@ -10,6 +10,7 @@ import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.uimanager.ThemedReactContext;
 import com.facebook.react.uimanager.events.RCTEventEmitter;
+import com.pili.pldroid.player.AVOptions;
 import com.pili.pldroid.player.PLMediaPlayer;
 import com.pili.pldroid.player.widget.PLVideoTextureView;
 
@@ -150,6 +151,12 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         mMediaPlayerValid = false;
         mVideoDuration = 0;
         mVideoBufferedDuration = 0;
+
+        int codec = AVOptions.MEDIA_CODEC_AUTO;
+        AVOptions options = new AVOptions();
+        options.setInteger(AVOptions.KEY_PREPARE_TIMEOUT, 10 * 1000);
+        options.setInteger(AVOptions.KEY_MEDIACODEC, codec);
+        setAVOptions(options);
 
         setScreenOnWhilePlaying(true);
         setOnErrorListener(this);
