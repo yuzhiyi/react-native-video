@@ -3,7 +3,6 @@ package com.brentvatne.react;
 import android.annotation.SuppressLint;
 import android.graphics.Matrix;
 import android.os.Handler;
-import android.util.Log;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.LifecycleEventListener;
@@ -40,7 +39,6 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         Size viewSize = new Size(getWidth(), getHeight());
         Size videoSize = new Size(videoWidth, videoHeight);
         ScaleManager scaleManager = new ScaleManager(viewSize, videoSize);
-        Log.i("mResizeMode",mResizeMode + "");
         Matrix matrix = scaleManager.getScaleMatrix(mResizeMode);
         if (matrix != null) {
             getTextureView().setTransform(matrix);
@@ -56,7 +54,8 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         EVENT_END("onVideoEnd"),
         EVENT_STALLED("onPlaybackStalled"),
         EVENT_RESUME("onPlaybackResume"),
-        EVENT_READY_FOR_DISPLAY("onReadyForDisplay");
+        EVENT_READY_FOR_DISPLAY("onReadyForDisplay"),
+        EVENT_IS_PLAYING("isPlaying");
 
         private final String mName;
 
@@ -84,7 +83,7 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
     public static final String EVENT_PROP_WIDTH = "width";
     public static final String EVENT_PROP_HEIGHT = "height";
     public static final String EVENT_PROP_ORIENTATION = "orientation";
-
+    public static final String EVENT_PROP_IS_PLAYING = "isPlaying";
     public static final String EVENT_PROP_ERROR = "error";
     public static final String EVENT_PROP_WHAT = "what";
 
@@ -130,6 +129,10 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
                     event.putDouble(EVENT_PROP_CURRENT_TIME, getCurrentPosition() / 1000.0);
                     event.putDouble(EVENT_PROP_PLAYABLE_DURATION, mVideoBufferedDuration / 1000.0); //TODO:mBufferUpdateRunnable
                     mEventEmitter.receiveEvent(getId(), Events.EVENT_PROGRESS.toString(), event);
+
+                    WritableMap ev = Arguments.createMap();
+                    ev.putBoolean(EVENT_PROP_IS_PLAYING, isPlaying());
+                    mEventEmitter.receiveEvent(getId(), Events.EVENT_IS_PLAYING.toString(), ev);
 
                     // Check for update after an interval
                     mProgressUpdateHandler.postDelayed(mProgressUpdateRunnable, Math.round(mProgressUpdateInterval));
@@ -269,12 +272,15 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         mPlayInBackground = playInBackground;
     }
 
-
     @Override
     public void onPrepared(PLMediaPlayer mp, int var2) {
         mMediaPlayerValid = true;
         mVideoDuration = (int) mp.getDuration();
         plMediaPlayer = mp;
+        WritableMap ev = Arguments.createMap();
+        ev.putBoolean(EVENT_PROP_IS_PLAYING, isPlaying());
+        mEventEmitter.receiveEvent(getId(), Events.EVENT_IS_PLAYING.toString(), ev);
+        getTextureView().setKeepScreenOn(true);
         WritableMap naturalSize = Arguments.createMap();
         naturalSize.putInt(EVENT_PROP_WIDTH, mp.getVideoWidth());
         naturalSize.putInt(EVENT_PROP_HEIGHT, mp.getVideoHeight());
@@ -301,12 +307,16 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
 
     @Override
     public boolean onError(PLMediaPlayer mp, int what) {
-
         WritableMap error = Arguments.createMap();
         error.putInt(EVENT_PROP_WHAT, what);
         WritableMap event = Arguments.createMap();
         event.putMap(EVENT_PROP_ERROR, error);
         mEventEmitter.receiveEvent(getId(), Events.EVENT_ERROR.toString(), event);
+
+        WritableMap ev = Arguments.createMap();
+        ev.putBoolean(EVENT_PROP_IS_PLAYING, isPlaying());
+        mEventEmitter.receiveEvent(getId(), Events.EVENT_IS_PLAYING.toString(), ev);
+
         return true;
     }
 

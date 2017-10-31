@@ -156,6 +156,12 @@ export default class Video extends Component {
     }
   };
 
+  _onIsPlaying = (event) => {
+    if (this.props.onIsPlaying) {
+      this.props.onIsPlaying(event.nativeEvent);
+    }
+  };
+
   render() {
     const resizeMode = this.props.resizeMode;
     const source = resolveAssetSource(this.props.source) || {};
@@ -209,6 +215,7 @@ export default class Video extends Component {
       onPlaybackRateChange: this._onPlaybackRateChange,
       onAudioFocusChanged: this._onAudioFocusChanged,
       onAudioBecomingNoisy: this._onAudioBecomingNoisy,
+      isPlaying: this._onIsPlaying
     });
 
     if (this.props.poster && this.state.showPoster) {

@@ -31,7 +31,6 @@ public class ReactVideoViewManager extends SimpleViewManager<ReactVideoView> {
     public static final String PROP_PLAY_IN_BACKGROUND = "playInBackground";
     public static final String PROP_CONTROLS = "controls";
 
-
     @Override
     public String getName() {
         return REACT_CLASS;
