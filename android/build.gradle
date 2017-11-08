@@ -18,6 +18,6 @@ android {
 dependencies {
     //noinspection GradleDynamicVersion
     provided 'com.facebook.react:react-native:+'
-    compile files('libs/pldroid-player-2.0.2.jar')
+    compile files('libs/pldroid-player-2.0.3.jar')
     compile 'com.qiniu:happy-dns:0.2.+'
 }
