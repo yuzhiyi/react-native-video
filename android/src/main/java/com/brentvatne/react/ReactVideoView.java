@@ -21,7 +21,6 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
 
     @Override
     public void onVideoSizeChanged(PLMediaPlayer plMediaPlayer, int width, int height) {
-
         if (!mMediaPlayerValid) {
             return;
         }
@@ -42,6 +41,12 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         Matrix matrix = scaleManager.getScaleMatrix(mResizeMode);
         if (matrix != null) {
             getTextureView().setTransform(matrix);
+        }
+        if (mVideoRotation == 90) {
+            if (getTextureView() != null) {
+                getTextureView().setRotation(90);
+                requestLayout();
+            }
         }
     }
 
@@ -90,7 +95,7 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
     private ThemedReactContext mThemedReactContext;
     private RCTEventEmitter mEventEmitter;
     private PLMediaPlayer plMediaPlayer;
-
+    private int mVideoRotation;
     private Handler mProgressUpdateHandler = new Handler();
     private Runnable mProgressUpdateRunnable = null;
 
@@ -338,7 +343,9 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
             case PLMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
                 mEventEmitter.receiveEvent(getId(), Events.EVENT_READY_FOR_DISPLAY.toString(), Arguments.createMap());
                 break;
-
+            case PLMediaPlayer.MEDIA_INFO_VIDEO_ROTATION_CHANGED:
+                mVideoRotation = extra;
+                break;
             default:
         }
         return false;
