@@ -2,25 +2,40 @@ package com.brentvatne.react;
 
 import android.annotation.SuppressLint;
 import android.graphics.Matrix;
+import android.graphics.SurfaceTexture;
+import android.os.Build;
 import android.os.Handler;
+import android.util.Log;
+import android.view.Surface;
+import android.view.TextureView;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.uimanager.ThemedReactContext;
 import com.facebook.react.uimanager.events.RCTEventEmitter;
-import com.pili.pldroid.player.AVOptions;
-import com.pili.pldroid.player.PLMediaPlayer;
-import com.pili.pldroid.player.widget.PLVideoTextureView;
+import com.brentvatne.react.ReactVideoViewManager;
+import com.brentvatne.react.ScalableType;
+import com.brentvatne.react.ScaleManager;
+import com.brentvatne.react.Size;
 
-@SuppressLint("ViewConstructor")
-public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.OnPreparedListener, PLMediaPlayer
-        .OnErrorListener, PLMediaPlayer.OnBufferingUpdateListener, PLMediaPlayer.OnCompletionListener,
-        PLMediaPlayer.OnInfoListener,PLMediaPlayer.OnVideoSizeChangedListener,LifecycleEventListener{
+import java.math.BigDecimal;
 
+import tv.danmaku.ijk.media.player.IMediaPlayer;
+import tv.danmaku.ijk.media.player.IjkMediaPlayer;
+
+public class ReactVideoView extends TextureView implements
+        IMediaPlayer.OnPreparedListener,
+        IMediaPlayer.OnErrorListener,
+        IMediaPlayer.OnBufferingUpdateListener,
+        IMediaPlayer.OnCompletionListener,
+        IMediaPlayer.OnInfoListener,
+        IMediaPlayer.OnVideoSizeChangedListener,
+        TextureView.SurfaceTextureListener,
+        LifecycleEventListener {
 
     @Override
-    public void onVideoSizeChanged(PLMediaPlayer plMediaPlayer, int width, int height) {
+    public void onVideoSizeChanged(IMediaPlayer iMediaPlayer, int i, int i1, int i2, int i3) {
         if (!mMediaPlayerValid) {
             return;
         }
@@ -40,14 +55,31 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         ScaleManager scaleManager = new ScaleManager(viewSize, videoSize);
         Matrix matrix = scaleManager.getScaleMatrix(mResizeMode);
         if (matrix != null) {
-            getTextureView().setTransform(matrix);
+            setTransform(matrix);
         }
-        if (mVideoRotation == 90) {
-            if (getTextureView() != null) {
-                getTextureView().setRotation(90);
-                requestLayout();
-            }
+    }
+
+    @Override
+    public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
+        Surface surface = new Surface(surfaceTexture);
+        if (plMediaPlayer != null) {
+            plMediaPlayer.setSurface(surface);
         }
+    }
+
+    @Override
+    public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) {
+
+    }
+
+    @Override
+    public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+        return false;
+    }
+
+    @Override
+    public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
+
     }
 
     public enum Events {
@@ -55,11 +87,16 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         EVENT_LOAD("onVideoLoad"),
         EVENT_ERROR("onVideoError"),
         EVENT_PROGRESS("onVideoProgress"),
+        EVENT_TIMED_METADATA("onTimedMetadata"),
         EVENT_SEEK("onVideoSeek"),
         EVENT_END("onVideoEnd"),
         EVENT_STALLED("onPlaybackStalled"),
         EVENT_RESUME("onPlaybackResume"),
         EVENT_READY_FOR_DISPLAY("onReadyForDisplay"),
+        EVENT_FULLSCREEN_WILL_PRESENT("onVideoFullscreenPlayerWillPresent"),
+        EVENT_FULLSCREEN_DID_PRESENT("onVideoFullscreenPlayerDidPresent"),
+        EVENT_FULLSCREEN_WILL_DISMISS("onVideoFullscreenPlayerWillDismiss"),
+        EVENT_FULLSCREEN_DID_DISMISS("onVideoFullscreenPlayerDidDismiss"),
         EVENT_IS_PLAYING("isPlaying");
 
         private final String mName;
@@ -73,6 +110,7 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
             return mName;
         }
     }
+
     public static final String EVENT_PROP_FAST_FORWARD = "canPlayFastForward";
     public static final String EVENT_PROP_SLOW_FORWARD = "canPlaySlowForward";
     public static final String EVENT_PROP_SLOW_REVERSE = "canPlaySlowReverse";
@@ -82,22 +120,30 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
 
     public static final String EVENT_PROP_DURATION = "duration";
     public static final String EVENT_PROP_PLAYABLE_DURATION = "playableDuration";
+    public static final String EVENT_PROP_SEEKABLE_DURATION = "seekableDuration";
     public static final String EVENT_PROP_CURRENT_TIME = "currentTime";
     public static final String EVENT_PROP_SEEK_TIME = "seekTime";
     public static final String EVENT_PROP_NATURALSIZE = "naturalSize";
     public static final String EVENT_PROP_WIDTH = "width";
     public static final String EVENT_PROP_HEIGHT = "height";
     public static final String EVENT_PROP_ORIENTATION = "orientation";
-    public static final String EVENT_PROP_IS_PLAYING = "isPlaying";
+    public static final String EVENT_PROP_METADATA = "metadata";
+    public static final String EVENT_PROP_TARGET = "target";
+    public static final String EVENT_PROP_METADATA_IDENTIFIER = "identifier";
+    public static final String EVENT_PROP_METADATA_VALUE = "value";
+
     public static final String EVENT_PROP_ERROR = "error";
     public static final String EVENT_PROP_WHAT = "what";
+    public static final String EVENT_PROP_EXTRA = "extra";
+    public static final String EVENT_PROP_IS_PLAYING = "isPlaying";
 
     private ThemedReactContext mThemedReactContext;
     private RCTEventEmitter mEventEmitter;
-    private PLMediaPlayer plMediaPlayer;
-    private int mVideoRotation;
+
     private Handler mProgressUpdateHandler = new Handler();
     private Runnable mProgressUpdateRunnable = null;
+    private IjkMediaPlayer plMediaPlayer;
+    private int mVideoRotation;
 
     private String mSrcUriString = null;
     private ScalableType mResizeMode = ScalableType.LEFT_TOP;
@@ -107,37 +153,38 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
     private float mVolume = 1.0f;
     private float mProgressUpdateInterval = 250.0f;
     private float mRate = 1.0f;
+    private float mStereoPan = 0.0f;
     private boolean mPlayInBackground = false;
     private boolean mActiveStatePauseStatus = false;
     private boolean mActiveStatePauseStatusInitialized = false;
+    private boolean mBackgroundPaused = false;
 
     private boolean mMediaPlayerValid = false; // True if mMediaPlayer is in prepared, started, paused or completed state.
 
     private int mVideoDuration = 0;
     private int mVideoBufferedDuration = 0;
     private boolean isCompleted = false;
-    private boolean mUseNativeControls = false;
 
     public ReactVideoView(ThemedReactContext themedReactContext) {
         super(themedReactContext);
-
         mThemedReactContext = themedReactContext;
         mEventEmitter = themedReactContext.getJSModule(RCTEventEmitter.class);
         themedReactContext.addLifecycleEventListener(this);
-
+        IjkMediaPlayer.loadLibrariesOnce(null);
+        IjkMediaPlayer.native_profileBegin("libijkplayer.so");
         mProgressUpdateRunnable = new Runnable() {
             @Override
             public void run() {
-
-                if (mMediaPlayerValid && !isCompleted &&!mPaused) {
+                if (mMediaPlayerValid && !isCompleted && !mPaused && !mBackgroundPaused) {
                     WritableMap event = Arguments.createMap();
-                    event.putDouble(EVENT_PROP_CURRENT_TIME, getCurrentPosition() / 1000.0);
+                    event.putDouble(EVENT_PROP_CURRENT_TIME, plMediaPlayer.getCurrentPosition() / 1000.0);
                     event.putDouble(EVENT_PROP_PLAYABLE_DURATION, mVideoBufferedDuration / 1000.0); //TODO:mBufferUpdateRunnable
-                    mEventEmitter.receiveEvent(getId(), Events.EVENT_PROGRESS.toString(), event);
+                    event.putDouble(EVENT_PROP_SEEKABLE_DURATION, mVideoDuration / 1000.0);
+                    mEventEmitter.receiveEvent(getId(), ReactVideoView.Events.EVENT_PROGRESS.toString(), event);
 
                     WritableMap ev = Arguments.createMap();
-                    ev.putBoolean(EVENT_PROP_IS_PLAYING, isPlaying());
-                    mEventEmitter.receiveEvent(getId(), Events.EVENT_IS_PLAYING.toString(), ev);
+                    ev.putBoolean(EVENT_PROP_IS_PLAYING, plMediaPlayer.isPlaying());
+                    mEventEmitter.receiveEvent(getId(), ReactVideoView.Events.EVENT_IS_PLAYING.toString(), ev);
 
                     // Check for update after an interval
                     mProgressUpdateHandler.postDelayed(mProgressUpdateRunnable, Math.round(mProgressUpdateInterval));
@@ -146,11 +193,38 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         };
     }
 
+    @SuppressLint("DrawAllocation")
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+
+        if (!changed || !mMediaPlayerValid) {
+            return;
+        }
+
+        int videoWidth = plMediaPlayer.getVideoWidth();
+        int videoHeight = plMediaPlayer.getVideoHeight();
+
+        if (videoWidth == 0 || videoHeight == 0) {
+            return;
+        }
+
+        Size viewSize = new Size(getWidth(), getHeight());
+        Size videoSize = new Size(videoWidth, videoHeight);
+        ScaleManager scaleManager = new ScaleManager(viewSize, videoSize);
+        Matrix matrix = scaleManager.getScaleMatrix(mResizeMode);
+        if (matrix != null) {
+            setTransform(matrix);
+        }
+    }
 
     public void cleanupMediaPlayerResources() {
         mMediaPlayerValid = false;
+        if (plMediaPlayer != null) {
+            mMediaPlayerValid = false;
+            plMediaPlayer.release();
+        }
         this.mProgressUpdateHandler.removeCallbacks(mProgressUpdateRunnable);
-        stopPlayback();
+        // stopPlayback();
     }
 
     public void setSrc(final String uriString) {
@@ -160,33 +234,37 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         mVideoDuration = 0;
         mVideoBufferedDuration = 0;
 
-        int codec = AVOptions.MEDIA_CODEC_AUTO;
-        AVOptions options = new AVOptions();
-        options.setInteger(AVOptions.KEY_PREPARE_TIMEOUT, 10 * 1000);
-        options.setInteger(AVOptions.KEY_MEDIACODEC, codec);
-        setAVOptions(options);
+        if (plMediaPlayer == null) {
+            plMediaPlayer = new IjkMediaPlayer();
 
-        setScreenOnWhilePlaying(true);
-        setOnErrorListener(this);
-        setOnPreparedListener(this);
-        setOnBufferingUpdateListener(this);
-        setOnCompletionListener(this);
-        setOnInfoListener(this);
-        setOnVideoSizeChangedListener(this);
+            plMediaPlayer.setOnErrorListener(this);
+            plMediaPlayer.setOnPreparedListener(this);
+            plMediaPlayer.setOnBufferingUpdateListener(this);
+            plMediaPlayer.setOnCompletionListener(this);
+            plMediaPlayer.setOnInfoListener(this);
+            plMediaPlayer.setOnVideoSizeChangedListener(this);
+            plMediaPlayer.setScreenOnWhilePlaying(true);
+            setSurfaceTextureListener(this);
+        }
+        plMediaPlayer.reset();
+
+        //  关闭播放器缓冲，这个必须关闭，否则会出现播放一段时间后，一直卡主，控制台打印 FFP_MSG_BUFFERING_START
+        plMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0L);
+        plMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1L);
+
         try {
-            setVideoPath(uriString);
+            plMediaPlayer.setDataSource(uriString);
         } catch (Exception e) {
             e.printStackTrace();
             return;
         }
-
         WritableMap src = Arguments.createMap();
         src.putString(ReactVideoViewManager.PROP_SRC_URI, uriString);
         WritableMap event = Arguments.createMap();
         event.putMap(ReactVideoViewManager.PROP_SRC, src);
-        mEventEmitter.receiveEvent(getId(), Events.EVENT_LOAD_START.toString(), event);;
+        mEventEmitter.receiveEvent(getId(), ReactVideoView.Events.EVENT_LOAD_START.toString(), event);
         try {
-            start();
+            plMediaPlayer.prepareAsync();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -205,33 +283,38 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         mRepeat = repeat;
 
         if (mMediaPlayerValid) {
-            setLooping(repeat);
+            plMediaPlayer.setLooping(repeat);
         }
     }
 
     public void setPausedModifier(final boolean paused) {
 
         mPaused = paused;
-
-        if ( !mActiveStatePauseStatusInitialized ) {
-            mActiveStatePauseStatus = mPaused;
-            mActiveStatePauseStatusInitialized = true;
-        }
-
         if (!mMediaPlayerValid) {
             return;
         }
 
         if (mPaused) {
-            if (isPlaying()) {
-                pause();
+            if (plMediaPlayer.isPlaying()) {
+                plMediaPlayer.pause();
             }
         } else {
-            if (!isPlaying()) {
-                start();
-                mProgressUpdateHandler.post(mProgressUpdateRunnable);
+            if (!plMediaPlayer.isPlaying()) {
+                plMediaPlayer.start();
+                setRateModifier(mRate);
             }
+            mProgressUpdateHandler.removeCallbacks(mProgressUpdateRunnable);
+            mProgressUpdateHandler.post(mProgressUpdateRunnable);
         }
+        setKeepScreenOn(!mPaused);
+    }
+
+    // reduces the volume based on stereoPan
+    private float calulateRelativeVolume() {
+        float relativeVolume = (mVolume * (1 - Math.abs(mStereoPan)));
+        // only one decimal allowed
+        BigDecimal roundRelativeVolume = new BigDecimal(relativeVolume).setScale(1, BigDecimal.ROUND_HALF_UP);
+        return roundRelativeVolume.floatValue();
     }
 
     public void setMutedModifier(final boolean muted) {
@@ -241,14 +324,25 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
             return;
         }
         if (mMuted) {
-            setVolume(0, 0);
+            plMediaPlayer.setVolume(0, 0);
+        } else if (mStereoPan < 0) {
+            // louder on the left channel
+            plMediaPlayer.setVolume(mVolume, calulateRelativeVolume());
+        } else if (mStereoPan > 0) {
+            // louder on the right channel
+            plMediaPlayer.setVolume(calulateRelativeVolume(), mVolume);
         } else {
-            setVolume(mVolume, mVolume);
+            plMediaPlayer.setVolume(mVolume, mVolume);
         }
     }
 
     public void setVolumeModifier(final float volume) {
         mVolume = volume;
+        setMutedModifier(mMuted);
+    }
+
+    public void setStereoPan(final float stereoPan) {
+        mStereoPan = stereoPan;
         setMutedModifier(mMuted);
     }
 
@@ -261,7 +355,7 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
 
         if (mMediaPlayerValid) {
             // TODO: Implement this.
-         }
+        }
     }
 
     public void applyModifiers() {
@@ -278,25 +372,127 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
     }
 
     @Override
-    public void onPrepared(PLMediaPlayer mp, int var2) {
-        mMediaPlayerValid = true;
-        mVideoDuration = (int) mp.getDuration();
-        plMediaPlayer = mp;
+    public void onHostResume() {
+        mBackgroundPaused = false;
+        if (!mPlayInBackground && !mPlayInBackground && !mPaused) {
+            new Handler().post(new Runnable() {
+                @Override
+                public void run() {
+                    setPausedModifier(false);
+                }
+            });
+        }
+    }
+
+    @Override
+    public void onHostPause() {
+        if (!mPlayInBackground && !mPaused && !mPlayInBackground) {
+            mBackgroundPaused = true;
+            setPausedModifier(true);
+        }
+    }
+
+    @Override
+    public void onHostDestroy() {
+        IjkMediaPlayer.native_profileEnd();
+    }
+
+    public void seekTo(int msec) {
+
+        if (mMediaPlayerValid) {
+            WritableMap event = Arguments.createMap();
+            event.putDouble(EVENT_PROP_CURRENT_TIME, plMediaPlayer.getCurrentPosition() / 1000.0);
+            event.putDouble(EVENT_PROP_SEEK_TIME, msec / 1000.0);
+            mEventEmitter.receiveEvent(getId(), ReactVideoView.Events.EVENT_SEEK.toString(), event);
+
+            plMediaPlayer.seekTo(msec);
+            if (isCompleted && mVideoDuration != 0 && msec < mVideoDuration) {
+                isCompleted = false;
+            }
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        mMediaPlayerValid = false;
+        setKeepScreenOn(false);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        setSrc(mSrcUriString);
+    }
+
+    @Override
+    public void onBufferingUpdate(IMediaPlayer iMediaPlayer, int percent) {
+        mVideoBufferedDuration = (int) Math.round((double) (mVideoDuration * percent) / 100.0);
+    }
+
+    @Override
+    public void onCompletion(IMediaPlayer iMediaPlayer) {
+        isCompleted = true;
+        mEventEmitter.receiveEvent(getId(), ReactVideoView.Events.EVENT_END.toString(), null);
+        if (!mRepeat) {
+            setKeepScreenOn(false);
+        }
+    }
+
+    @Override
+    public boolean onError(IMediaPlayer iMediaPlayer, int i, int i1) {
+        WritableMap error = Arguments.createMap();
+        error.putInt(EVENT_PROP_WHAT, i);
+        WritableMap event = Arguments.createMap();
+        event.putMap(EVENT_PROP_ERROR, error);
+        mEventEmitter.receiveEvent(getId(), ReactVideoView.Events.EVENT_ERROR.toString(), event);
+
         WritableMap ev = Arguments.createMap();
-        ev.putBoolean(EVENT_PROP_IS_PLAYING, isPlaying());
-        mEventEmitter.receiveEvent(getId(), Events.EVENT_IS_PLAYING.toString(), ev);
-        getTextureView().setKeepScreenOn(true);
+        ev.putBoolean(EVENT_PROP_IS_PLAYING, plMediaPlayer.isPlaying());
+        mEventEmitter.receiveEvent(getId(), ReactVideoView.Events.EVENT_IS_PLAYING.toString(), ev);
+
+        return true;
+    }
+
+    @Override
+    public boolean onInfo(IMediaPlayer iMediaPlayer, int what, int extra) {
+        switch (what) {
+            case IMediaPlayer.MEDIA_INFO_BUFFERING_START:
+                mEventEmitter.receiveEvent(getId(), Events.EVENT_STALLED.toString(), Arguments.createMap());
+                break;
+            case IMediaPlayer.MEDIA_INFO_BUFFERING_END:
+                mEventEmitter.receiveEvent(getId(), Events.EVENT_RESUME.toString(), Arguments.createMap());
+                break;
+            case IMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
+                mEventEmitter.receiveEvent(getId(), Events.EVENT_READY_FOR_DISPLAY.toString(), Arguments.createMap());
+                break;
+            case IMediaPlayer.MEDIA_INFO_VIDEO_ROTATION_CHANGED:
+                mVideoRotation = extra;
+                break;
+            default:
+        }
+        return false;
+    }
+
+    @Override
+    public void onPrepared(IMediaPlayer iMediaPlayer) {
+        mMediaPlayerValid = true;
+        mVideoDuration = (int) plMediaPlayer.getDuration();
+        WritableMap ev = Arguments.createMap();
+        ev.putBoolean(EVENT_PROP_IS_PLAYING, plMediaPlayer.isPlaying());
+        mEventEmitter.receiveEvent(getId(), ReactVideoView.Events.EVENT_IS_PLAYING.toString(), ev);
+        setKeepScreenOn(true);
         WritableMap naturalSize = Arguments.createMap();
-        naturalSize.putInt(EVENT_PROP_WIDTH, mp.getVideoWidth());
-        naturalSize.putInt(EVENT_PROP_HEIGHT, mp.getVideoHeight());
-        if (mp.getVideoWidth() > mp.getVideoHeight())
+        naturalSize.putInt(EVENT_PROP_WIDTH, plMediaPlayer.getVideoWidth());
+        naturalSize.putInt(EVENT_PROP_HEIGHT, plMediaPlayer.getVideoHeight());
+        if (plMediaPlayer.getVideoWidth() > plMediaPlayer.getVideoHeight())
             naturalSize.putString(EVENT_PROP_ORIENTATION, "landscape");
         else
             naturalSize.putString(EVENT_PROP_ORIENTATION, "portrait");
 
         WritableMap event = Arguments.createMap();
         event.putDouble(EVENT_PROP_DURATION, mVideoDuration / 1000.0);
-        event.putDouble(EVENT_PROP_CURRENT_TIME, mp.getCurrentPosition() / 1000.0);
+        event.putDouble(EVENT_PROP_CURRENT_TIME, plMediaPlayer.getCurrentPosition() / 1000.0);
         event.putMap(EVENT_PROP_NATURALSIZE, naturalSize);
         // TODO: Actually check if you can.
         event.putBoolean(EVENT_PROP_FAST_FORWARD, true);
@@ -306,125 +502,7 @@ public class ReactVideoView extends PLVideoTextureView implements PLMediaPlayer.
         event.putBoolean(EVENT_PROP_FAST_FORWARD, true);
         event.putBoolean(EVENT_PROP_STEP_BACKWARD, true);
         event.putBoolean(EVENT_PROP_STEP_FORWARD, true);
-        mEventEmitter.receiveEvent(getId(), Events.EVENT_LOAD.toString(), event);
+        mEventEmitter.receiveEvent(getId(), ReactVideoView.Events.EVENT_LOAD.toString(), event);
         applyModifiers();
-    }
-
-    @Override
-    public boolean onError(PLMediaPlayer mp, int what) {
-        WritableMap error = Arguments.createMap();
-        error.putInt(EVENT_PROP_WHAT, what);
-        WritableMap event = Arguments.createMap();
-        event.putMap(EVENT_PROP_ERROR, error);
-        mEventEmitter.receiveEvent(getId(), Events.EVENT_ERROR.toString(), event);
-
-        WritableMap ev = Arguments.createMap();
-        ev.putBoolean(EVENT_PROP_IS_PLAYING, isPlaying());
-        mEventEmitter.receiveEvent(getId(), Events.EVENT_IS_PLAYING.toString(), ev);
-
-        return true;
-    }
-
-    @Override
-    public void onCompletion(PLMediaPlayer plMediaPlayer) {
-        isCompleted = true;
-        mEventEmitter.receiveEvent(getId(), Events.EVENT_END.toString(), null);
-    }
-
-    @Override
-    public boolean onInfo(PLMediaPlayer mp, int what, int extra) {
-        switch (what) {
-            case PLMediaPlayer.MEDIA_INFO_BUFFERING_START:
-                mEventEmitter.receiveEvent(getId(), Events.EVENT_STALLED.toString(), Arguments.createMap());
-                break;
-            case PLMediaPlayer.MEDIA_INFO_BUFFERING_END:
-                mEventEmitter.receiveEvent(getId(), Events.EVENT_RESUME.toString(), Arguments.createMap());
-                break;
-            case PLMediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START:
-                mEventEmitter.receiveEvent(getId(), Events.EVENT_READY_FOR_DISPLAY.toString(), Arguments.createMap());
-                break;
-            case PLMediaPlayer.MEDIA_INFO_VIDEO_ROTATION_CHANGED:
-                mVideoRotation = extra;
-                break;
-            default:
-        }
-        return false;
-    }
-
-    @Override
-    public void onBufferingUpdate(PLMediaPlayer mp, int percent) {
-        mVideoBufferedDuration = (int) Math.round((double) (mVideoDuration * percent) / 100.0);
-    }
-
-    public void seekTo(int msec) {
-
-        if (mMediaPlayerValid) {
-            WritableMap event = Arguments.createMap();
-            event.putDouble(EVENT_PROP_CURRENT_TIME, getCurrentPosition() / 1000.0);
-            event.putDouble(EVENT_PROP_SEEK_TIME, msec / 1000.0);
-            mEventEmitter.receiveEvent(getId(), Events.EVENT_SEEK.toString(), event);
-
-            super.seekTo(msec);
-            if (isCompleted && mVideoDuration != 0 && msec < mVideoDuration) {
-                isCompleted = false;
-            }
-        }
-    }
-
-    @Override
-    public int getBufferPercentage() {
-        return 0;
-    }
-
-    @Override
-    public boolean canPause() {
-        return true;
-    }
-
-    @Override
-    public boolean canSeekBackward() {
-        return true;
-    }
-
-    @Override
-    public boolean canSeekForward() {
-        return true;
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-
-        mMediaPlayerValid = false;
-        super.onDetachedFromWindow();
-    }
-
-    @Override
-    protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
-    }
-
-    @Override
-    public void onHostPause() {
-        if (!mPlayInBackground) {
-            mActiveStatePauseStatus = mPaused;
-            setPausedModifier(true);
-        }
-    }
-
-    @Override
-    public void onHostResume() {
-        if (!mPlayInBackground) {
-            new Handler().post(new Runnable() {
-                @Override
-                public void run() {
-                    setPausedModifier(mActiveStatePauseStatus);
-                }
-            });
-
-        }
-    }
-
-    @Override
-    public void onHostDestroy() {
     }
 }
