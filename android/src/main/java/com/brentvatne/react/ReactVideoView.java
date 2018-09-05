@@ -374,11 +374,11 @@ public class ReactVideoView extends TextureView implements
     @Override
     public void onHostResume() {
         mBackgroundPaused = false;
-        if (!mPlayInBackground && !mPlayInBackground && !mPaused) {
+        if (mMediaPlayerValid && !mPlayInBackground) {
             new Handler().post(new Runnable() {
                 @Override
                 public void run() {
-                    setPausedModifier(false);
+                    setPausedModifier(!mPaused);
                 }
             });
         }
@@ -386,7 +386,7 @@ public class ReactVideoView extends TextureView implements
 
     @Override
     public void onHostPause() {
-        if (!mPlayInBackground && !mPaused && !mPlayInBackground) {
+        if (mMediaPlayerValid && !mPaused && !mPlayInBackground) {
             mBackgroundPaused = true;
             setPausedModifier(true);
         }
